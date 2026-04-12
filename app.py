@@ -1,4 +1,41 @@
-st.title("🧴 IngredientIQ")
+import streamlit as st
+import requests
+import plotly.express as px
+from collections import Counter
+
+st.set_page_config(page_title="IngredientIQ", layout="centered")
+
+def get_fda_total(ingredient):
+    url = "https://api.fda.gov/drug/event.json"
+    params = {"search": f"patient.drug.medicinalproduct:{ingredient}", "limit": 1}
+    r = requests.get(url, params=params, timeout=10)
+    if r.status_code == 200:
+        return r.json()["meta"]["results"]["total"]
+    return 0
+
+def get_top_reactions(ingredient):
+    url = "https://api.fda.gov/drug/event.json"
+    params = {"search": f"patient.drug.medicinalproduct:{ingredient}", "limit": 100}
+    r = requests.get(url, params=params, timeout=10)
+    if r.status_code != 200:
+        return []
+    reactions = []
+    for report in r.json()["results"]:
+        for reaction in report["patient"]["reaction"]:
+            reactions.append(reaction["reactionmeddrapt"])
+    return reactions
+
+def clean_beauty_score(total):
+    if total > 1000000:
+        return 2, "Very High Risk"
+    elif total > 100000:
+        return 4, "High Report Volume"
+    elif total > 10000:
+        return 6, "Moderate Reports"
+    else:
+        return 8, "Low Report Volume"
+
+st.title("IngredientIQ")
 st.subheader("Cosmetic Ingredient Safety Checker")
 
 mode = st.radio("Mode", ["Single ingredient", "Compare ingredients"])
@@ -22,7 +59,7 @@ for ingredient in ingredients:
         with st.spinner(f"Looking up {ingredient}..."):
             total = get_fda_total(ingredient)
             reactions = get_top_reactions(ingredient)
-        
+
         if total == 0:
             st.warning(f"No data found for: {ingredient}")
         else:
@@ -34,7 +71,7 @@ for ingredient in ingredients:
                 st.write(label)
             with col2:
                 st.metric("FDA Reports", f"{total:,}")
-            
+
             if reactions:
                 counts = Counter(reactions)
                 top10 = counts.most_common(10)
@@ -46,7 +83,7 @@ for ingredient in ingredients:
                 fig.update_layout(height=350, showlegend=False,
                                 yaxis=dict(autorange="reversed"))
                 st.plotly_chart(fig, use_container_width=True)
-            
+
             st.markdown("---")
 
 st.caption("Data: FDA FAERS via openFDA API. Built by Clinical Data Intelligence.")
